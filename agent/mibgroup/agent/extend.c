@@ -371,6 +371,10 @@ extend_load_cache(netsnmp_cache *cache, void *magic)
         line_buf[ 0 ] = extension->output;
         for (cp=extension->output; *cp; cp++) {
             if (*cp == '\n') {
+                if (extension->numlines >=
+                    sizeof(line_buf) / sizeof(line_buf[0])) {
+                    break;
+                }
                 line_buf[ extension->numlines++ ] = cp+1;
             }
         }
