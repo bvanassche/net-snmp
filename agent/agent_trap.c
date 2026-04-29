@@ -1475,7 +1475,6 @@ _parse_config_sink(const char *token, char *cptr, int version, int type)
 {
     char           *sp, *cp, *pp = NULL, *src = NULL;
     char           *st, *name = NULL, *tag = NULL, *profile = NULL;
-    int            done = 0;
 
     if (!snmp_trapcommunity)
         snmp_trapcommunity = strdup("public");
@@ -1485,11 +1484,9 @@ _parse_config_sink(const char *token, char *cptr, int version, int type)
     /*
      * check for optional arguments
      */
-    do {
-        if (*sp != '-') {
-            done = 1;
-            continue;
-        }
+    for (;;) {
+        if (*sp != '-')
+            break;
         if (strcmp(sp, "-name") == 0)
             name = strtok_r(NULL, " \t\n", &st);
         else if (strcmp(sp, "-tag") == 0)
@@ -1501,7 +1498,7 @@ _parse_config_sink(const char *token, char *cptr, int version, int type)
         else
             netsnmp_config_warn("ignoring unknown argument: %s", sp);
         sp = strtok_r(NULL, " \t\n", &st);
-    } while (!done);
+    }
     cp = strtok_r(NULL, " \t\n", &st);
     if (cp)
         pp = strtok_r(NULL, " \t\n", &st);
