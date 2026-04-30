@@ -1485,7 +1485,11 @@ _parse_config_sink(const char *token, char *cptr, int version, int type)
      * check for optional arguments
      */
     for (;;) {
-        if (!sp || *sp != '-')
+        if (!sp) {
+            netsnmp_config_error("missing trapsink: %s", cptr);
+            return;
+        }
+        if (*sp != '-')
             break;
         if (strcmp(sp, "-name") == 0)
             name = strtok_r(NULL, " \t\n", &st);
