@@ -719,3 +719,9 @@ AC_SUBST([LIBCURSES])
 #   libm for ceil
 #
 NETSNMP_SEARCH_LIBS(ceil, m,,,, LNETSNMPLIBS)
+
+if test x$CRYPTO != x; then
+    LMIBLIBS="$LMIBLIBS $LIBCRYPTO"
+fi
+
+AC_SUBST(LIBCRYPTO)
