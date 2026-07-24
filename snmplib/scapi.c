@@ -708,6 +708,11 @@ sc_get_openssl_privfn(int priv_type)
     DEBUGTRACE;
 
     switch(priv_type & (USM_PRIV_MASK_ALG | USM_PRIV_MASK_VARIANT)) {
+#ifndef NETSNMP_DISABLE_DES
+        case USM_CREATE_USER_PRIV_DES:
+            fn = (const EVP_CIPHER *)EVP_des_cbc();
+            break;
+#endif
 #ifdef HAVE_AES
         case USM_CREATE_USER_PRIV_AES:
             fn = (const EVP_CIPHER *)EVP_aes_128_cfb();
@@ -1215,6 +1220,7 @@ sc_encrypt(const oid * privtype, size_t privtypelen,
     u_char          my_iv[128];  /* ditto */
     const netsnmp_priv_alg_info *pai = NULL;
 #ifndef NETSNMP_DISABLE_DES
+#ifndef NETSNMP_USE_OPENSSL
     int             pad, plast, pad_size = 0;
 #ifdef OLD_DES
     DES_key_schedule key_sch;
@@ -1223,6 +1229,7 @@ sc_encrypt(const oid * privtype, size_t privtypelen,
     DES_key_schedule *key_sch = &key_sched_store;
 #endif /* OLD_DES */
     DES_cblock       key_struct;
+#endif /* !NETSNMP_USE_OPENSSL */
 #endif /* NETSNMP_DISABLE_DES */
 
     DEBUGTRACE;
@@ -1298,13 +1305,100 @@ sc_encrypt(const oid * privtype, size_t privtypelen,
 
     memset(my_iv, 0, sizeof(my_iv));
 
+#ifdef NETSNMP_USE_OPENSSL
+    if (
+#ifndef NETSNMP_DISABLE_DES
+        (USM_CREATE_USER_PRIV_DES == (pai->type & USM_PRIV_MASK_ALG)) ||
+#endif
+        (USM_CREATE_USER_PRIV_AES == (pai->type & USM_PRIV_MASK_ALG))
+    ) {
+        EVP_CIPHER_CTX *ctx;
+        const EVP_CIPHER *cipher;
+        int len, rc, enclen;
+        int block_size;
+
+        cipher = sc_get_openssl_privfn(pai->type);
+        if (NULL == cipher) {
+            DEBUGMSGTL(("scapi:encrypt", "cipher not found\n"));
+            QUITFUN(SNMPERR_GENERR, sc_encrypt_quit);
+        }
+
+        block_size = EVP_CIPHER_block_size(cipher);
+
+        memcpy(my_iv, iv, ivlen);
+
+        ctx = EVP_CIPHER_CTX_new();
+        if (!ctx) {
+            DEBUGMSGTL(("scapi:encrypt", "openssl error: ctx_new\n"));
+            QUITFUN(SNMPERR_GENERR, sc_encrypt_quit);
+        }
+        rc = EVP_EncryptInit(ctx, cipher, key, my_iv);
+        if (rc != 1) {
+            DEBUGMSGTL(("scapi:encrypt", "openssl error: init\n"));
+            EVP_CIPHER_CTX_free(ctx);
+            QUITFUN(SNMPERR_GENERR, sc_encrypt_quit);
+        }
+        
+        EVP_CIPHER_CTX_set_padding(ctx, 0);
+
+        if (block_size > 1) {
+            int pad = block_size - (ptlen % block_size);
+            int plast = (int) ptlen - (block_size - pad);
+            if (pad == block_size)
+                pad = 0;
+            if (ptlen + pad > *ctlen) {
+                DEBUGMSGTL(("scapi:encrypt", "not enough space\n"));
+                EVP_CIPHER_CTX_free(ctx);
+                QUITFUN(SNMPERR_GENERR, sc_encrypt_quit);
+            }
+            if (pad > 0) {
+                memcpy(pad_block, plaintext + plast, block_size - pad);
+                memset(&pad_block[block_size - pad], pad, pad);
+            }
+
+            rc = EVP_EncryptUpdate(ctx, ciphertext, &len, plaintext, plast);
+            if (rc != 1) {
+                DEBUGMSGTL(("scapi:encrypt", "openssl error: update 1\n"));
+                EVP_CIPHER_CTX_free(ctx);
+                QUITFUN(SNMPERR_GENERR, sc_encrypt_quit);
+            }
+            enclen = len;
+
+            if (pad > 0) {
+                rc = EVP_EncryptUpdate(ctx, ciphertext + plast, &len, pad_block, block_size);
+                if (rc != 1) {
+                    DEBUGMSGTL(("scapi:encrypt", "openssl error: update 2\n"));
+                    EVP_CIPHER_CTX_free(ctx);
+                    QUITFUN(SNMPERR_GENERR, sc_encrypt_quit);
+                }
+                enclen += len;
+            }
+            *ctlen = enclen;
+        } else {
+            rc = EVP_EncryptUpdate(ctx, ciphertext, &len, plaintext, ptlen);
+            if (rc != 1) {
+                DEBUGMSGTL(("scapi:encrypt", "openssl error: update\n"));
+                EVP_CIPHER_CTX_free(ctx);
+                QUITFUN(SNMPERR_GENERR, sc_encrypt_quit);
+            }
+            enclen = len;
+            *ctlen = enclen;
+        }
+
+        rc = EVP_EncryptFinal(ctx, ciphertext + enclen, &len);
+        if (rc != 1) {
+            DEBUGMSGTL(("scapi:encrypt", "openssl error: final\n"));
+            EVP_CIPHER_CTX_free(ctx);
+            QUITFUN(SNMPERR_GENERR, sc_encrypt_quit);
+        }
+        *ctlen += len;
+
+        EVP_CIPHER_CTX_free(ctx);
+    }
+#else /* !NETSNMP_USE_OPENSSL */
 #ifndef NETSNMP_DISABLE_DES
     if (USM_CREATE_USER_PRIV_DES == (pai->type & USM_PRIV_MASK_ALG)) {
-
-        /*
-         * now calculate the padding needed 
-         */
-
+        /* now calculate the padding needed */
         pad_size = pai->pad_size;
         pad = pad_size - (ptlen % pad_size);
         plast = (int) ptlen - (pad_size - pad);
@@ -1339,54 +1433,8 @@ sc_encrypt(const oid * privtype, size_t privtypelen,
             *ctlen = plast;
         }
     }
-#endif
-#if defined(NETSNMP_USE_OPENSSL) && defined(HAVE_AES)
-    if (USM_CREATE_USER_PRIV_AES == (pai->type & USM_PRIV_MASK_ALG)) {
-        EVP_CIPHER_CTX *ctx;
-        const EVP_CIPHER *cipher;
-        int len, rc, enclen;
-
-        cipher = sc_get_openssl_privfn(pai->type);
-        if (NULL == cipher) {
-            DEBUGMSGTL(("scapi:encrypt", "cipher not found\n"));
-            QUITFUN(SNMPERR_GENERR, sc_encrypt_quit);
-        }
-
-        memcpy(my_iv, iv, ivlen);
-        /*
-         * encrypt the data 
-         */
-        ctx = EVP_CIPHER_CTX_new();
-        if (!ctx) {
-            DEBUGMSGTL(("scapi:encrypt", "openssl error: ctx_new\n"));
-            QUITFUN(SNMPERR_GENERR, sc_encrypt_quit);
-        }
-        rc = EVP_EncryptInit(ctx, cipher, key, my_iv);
-        if (rc != 1) {
-            DEBUGMSGTL(("scapi:encrypt", "openssl error: init\n"));
-            EVP_CIPHER_CTX_free(ctx);
-            QUITFUN(SNMPERR_GENERR, sc_encrypt_quit);
-        }
-        rc = EVP_EncryptUpdate(ctx, ciphertext, &len, plaintext, ptlen);
-        if (rc != 1) {
-            DEBUGMSGTL(("scapi:encrypt", "openssl error: update\n"));
-            EVP_CIPHER_CTX_free(ctx);
-            QUITFUN(SNMPERR_GENERR, sc_encrypt_quit);
-        }
-        enclen = len;
-        rc = EVP_EncryptFinal(ctx, ciphertext + len, &len);
-        if (rc != 1) {
-            DEBUGMSGTL(("scapi:encrypt", "openssl error: final\n"));
-            EVP_CIPHER_CTX_free(ctx);
-            QUITFUN(SNMPERR_GENERR, sc_encrypt_quit);
-        }
-        enclen += len;
-        ptlen = enclen;
-        /* Clean up */
-        EVP_CIPHER_CTX_free(ctx);
-        *ctlen = ptlen;
-    }
-#endif
+#endif /* NETSNMP_DISABLE_DES */
+#endif /* NETSNMP_USE_OPENSSL */
   sc_encrypt_quit:
     /*
      * clear memory just in case 
@@ -1394,12 +1442,14 @@ sc_encrypt(const oid * privtype, size_t privtypelen,
     memset(my_iv, 0, sizeof(my_iv));
     memset(pad_block, 0, sizeof(pad_block));
 #ifndef NETSNMP_DISABLE_DES
+#ifndef NETSNMP_USE_OPENSSL
     memset(key_struct, 0, sizeof(key_struct));
 #ifdef OLD_DES
     memset(&key_sch, 0, sizeof(key_sch));
 #else
     memset(&key_sched_store, 0, sizeof(key_sched_store));
 #endif
+#endif /* !NETSNMP_USE_OPENSSL */
 #endif
     return rval;
 
@@ -1499,6 +1549,7 @@ sc_decrypt(const oid * privtype, size_t privtypelen,
     int             rval = SNMPERR_SUCCESS;
     u_char          my_iv[128];
 #ifndef NETSNMP_DISABLE_DES
+#ifndef NETSNMP_USE_OPENSSL
 #ifdef OLD_DES
     DES_key_schedule key_sch;
 #else
@@ -1506,6 +1557,7 @@ sc_decrypt(const oid * privtype, size_t privtypelen,
     DES_key_schedule *key_sch = &key_sched_store;
 #endif
     DES_cblock      key_struct;
+#endif /* !NETSNMP_USE_OPENSSL */
 #endif
     const netsnmp_priv_alg_info *pai = NULL;
 
@@ -1553,6 +1605,53 @@ sc_decrypt(const oid * privtype, size_t privtypelen,
     }
 
     memset(my_iv, 0, sizeof(my_iv));
+#ifdef NETSNMP_USE_OPENSSL
+    if (
+#ifndef NETSNMP_DISABLE_DES
+        (USM_CREATE_USER_PRIV_DES == (pai->type & USM_PRIV_MASK_ALG)) ||
+#endif
+        (USM_CREATE_USER_PRIV_AES == (pai->type & USM_PRIV_MASK_ALG))
+    ) {
+        EVP_CIPHER_CTX *ctx;
+        const EVP_CIPHER *cipher;
+        int len, rc, declen;
+
+        cipher = sc_get_openssl_privfn(pai->type);
+        if (NULL == cipher)
+            QUITFUN(SNMPERR_GENERR, sc_decrypt_quit);
+
+        memcpy(my_iv, iv, ivlen);
+
+        ctx = EVP_CIPHER_CTX_new();
+        if (!ctx) {
+            QUITFUN(SNMPERR_GENERR, sc_decrypt_quit);
+        }
+        rc = EVP_DecryptInit(ctx, cipher, key, my_iv);
+        if (rc != 1) {
+            EVP_CIPHER_CTX_free(ctx);
+            QUITFUN(SNMPERR_GENERR, sc_decrypt_quit);
+        }
+        
+        EVP_CIPHER_CTX_set_padding(ctx, 0);
+
+        rc = EVP_DecryptUpdate(ctx, plaintext, &len, ciphertext, ctlen);
+        if (rc != 1) {
+            EVP_CIPHER_CTX_free(ctx);
+            QUITFUN(SNMPERR_GENERR, sc_decrypt_quit);
+        }
+        declen = len;
+        
+        rc = EVP_DecryptFinal(ctx, plaintext + len, &len);
+        if (rc != 1) {
+            EVP_CIPHER_CTX_free(ctx);
+            QUITFUN(SNMPERR_GENERR, sc_decrypt_quit);
+        }
+        declen += len;
+
+        EVP_CIPHER_CTX_free(ctx);
+        *ptlen = declen;
+    }
+#else /* !NETSNMP_USE_OPENSSL */
 #ifndef NETSNMP_DISABLE_DES
     if (USM_CREATE_USER_PRIV_DES == (pai->type & USM_PRIV_MASK_ALG)) {
         memcpy(key_struct, key, sizeof(key_struct));
@@ -1563,57 +1662,22 @@ sc_decrypt(const oid * privtype, size_t privtypelen,
                         (DES_cblock *) my_iv, DES_DECRYPT);
         *ptlen = ctlen;
     }
-#endif
-#if defined(NETSNMP_USE_OPENSSL) && defined(HAVE_AES)
-    if (USM_CREATE_USER_PRIV_AES == (pai->type & USM_PRIV_MASK_ALG)) {
-        EVP_CIPHER_CTX *ctx;
-        const EVP_CIPHER *cipher;
-        int len, rc;
-
-        cipher = sc_get_openssl_privfn(pai->type);
-        if (NULL == cipher)
-            QUITFUN(SNMPERR_GENERR, sc_decrypt_quit);
-
-        memcpy(my_iv, iv, ivlen);
-        /*
-         * decrypt the data
-         */
-        ctx = EVP_CIPHER_CTX_new();
-        if (!ctx) {
-            QUITFUN(SNMPERR_GENERR, sc_decrypt_quit);
-        }
-        rc = EVP_DecryptInit(ctx, cipher, key, my_iv);
-        if (rc != 1) {
-            EVP_CIPHER_CTX_free(ctx);
-            QUITFUN(SNMPERR_GENERR, sc_decrypt_quit);
-        }
-        rc = EVP_DecryptUpdate(ctx, plaintext, &len, ciphertext, ctlen);
-        if (rc != 1) {
-            EVP_CIPHER_CTX_free(ctx);
-            QUITFUN(SNMPERR_GENERR, sc_decrypt_quit);
-        }
-        rc = EVP_DecryptFinal(ctx, plaintext + len, &len);
-        if (rc != 1) {
-            EVP_CIPHER_CTX_free(ctx);
-            QUITFUN(SNMPERR_GENERR, sc_decrypt_quit);
-        }
-        /* Clean up */
-        EVP_CIPHER_CTX_free(ctx);
-        *ptlen = ctlen;
-    }
-#endif
+#endif /* NETSNMP_DISABLE_DES */
+#endif /* NETSNMP_USE_OPENSSL */
 
     /*
      * exit cond 
      */
   sc_decrypt_quit:
 #ifndef NETSNMP_DISABLE_DES
+#ifndef NETSNMP_USE_OPENSSL
 #ifdef OLD_DES
     memset(&key_sch, 0, sizeof(key_sch));
 #else
     memset(&key_sched_store, 0, sizeof(key_sched_store));
 #endif
     memset(key_struct, 0, sizeof(key_struct));
+#endif /* !NETSNMP_USE_OPENSSL */
 #endif
     memset(my_iv, 0, sizeof(my_iv));
     return rval;
