@@ -83,12 +83,16 @@ netsnmp_feature_child_of(usm_scapi, usm_support);
 #endif
 
 #ifdef NETSNMP_USE_OPENSSL
+#include <openssl/opensslv.h>
 #include <openssl/hmac.h>
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <openssl/des.h>
 #ifdef HAVE_AES
 #include <openssl/aes.h>
+#endif
+#ifdef HAVE_OPENSSL_PROVIDER_H
+#include <openssl/provider.h>
 #endif
 
 #ifndef NETSNMP_DISABLE_DES
@@ -535,6 +539,25 @@ sc_get_proper_priv_length_bytype(int privtype)
 }
 
 
+#if defined(NETSNMP_USE_OPENSSL) && defined(HAVE_OPENSSL_PROVIDER_H)
+static OSSL_PROVIDER *legacy_provider;
+static OSSL_PROVIDER *default_provider;
+
+static int
+sc_shutdown(int majorID, int minorID, void *serverarg, void *clientarg)
+{
+    if (legacy_provider) {
+        OSSL_PROVIDER_unload(legacy_provider);
+        legacy_provider = NULL;
+    }
+    if (default_provider) {
+        OSSL_PROVIDER_unload(default_provider);
+        default_provider = NULL;
+    }
+    return SNMPERR_SUCCESS;
+}
+#endif
+
 /*******************************************************************-o-******
  * sc_init
  *
@@ -546,7 +569,17 @@ sc_init(void)
 {
     int             rval = SNMPERR_SUCCESS;
 
-#if !defined(NETSNMP_USE_OPENSSL)
+#if defined(NETSNMP_USE_OPENSSL)
+#if defined(HAVE_OPENSSL_PROVIDER_H)
+    if (legacy_provider == NULL)
+        legacy_provider = OSSL_PROVIDER_load(NULL, "legacy");
+    if (default_provider == NULL)
+        default_provider = OSSL_PROVIDER_load(NULL, "default");
+    snmp_register_callback(SNMP_CALLBACK_LIBRARY,
+                           SNMP_CALLBACK_SHUTDOWN,
+                           sc_shutdown, NULL);
+#endif
+#else /* !NETSNMP_USE_OPENSSL */
 #if defined(NETSNMP_USE_INTERNAL_MD5) || defined(NETSNMP_USE_INTERNAL_CRYPTO)
     struct timeval  tv;
 
@@ -565,7 +598,7 @@ sc_init(void)
      * XXX ogud: The only reason to do anything here with openssl is to 
      * * XXX ogud: seed random number generator 
      */
-#endif                          /* ifndef NETSNMP_USE_OPENSSL */
+#endif                          /* NETSNMP_USE_OPENSSL */
 
     return rval;
 }                               /* end sc_init() */

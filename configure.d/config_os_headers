@@ -109,6 +109,7 @@ openssl/evp.h					\
 openssl/hmac.h					\
 openssl/objects.h				\
 openssl/ossl_typ.h				\
+openssl/provider.h				\
 openssl/rand.h					\
 openssl/ssl.h					\
 openssl/x509.h					\

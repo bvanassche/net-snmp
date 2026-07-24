@@ -19901,6 +19901,12 @@ then :
   printf "%s\n" "#define HAVE_OPENSSL_OSSL_TYP_H 1" >>confdefs.h
 
 fi
+ac_fn_c_check_header_compile "$LINENO" "openssl/provider.h" "ac_cv_header_openssl_provider_h" "$ac_includes_default"
+if test "x$ac_cv_header_openssl_provider_h" = xyes
+then :
+  printf "%s\n" "#define HAVE_OPENSSL_PROVIDER_H 1" >>confdefs.h
+
+fi
 ac_fn_c_check_header_compile "$LINENO" "openssl/rand.h" "ac_cv_header_openssl_rand_h" "$ac_includes_default"
 if test "x$ac_cv_header_openssl_rand_h" = xyes
 then :
