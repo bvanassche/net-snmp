@@ -2,6 +2,8 @@
  * HEADER Testing run_exec_command()
  */
 
+#include <utilities/execute.h>
+
 struct test_data {
     const char *command;
     const char *input;
