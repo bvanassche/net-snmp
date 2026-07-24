@@ -127,9 +127,6 @@ typedef struct netsnmp_priv_alg_info_s {
 
     NETSNMP_IMPORT
     int             sc_init(void);
-    NETSNMP_IMPORT
-    int             sc_shutdown(int majorID, int minorID, void *serverarg,
-                                void *clientarg);
 
     NETSNMP_IMPORT
     int             sc_random(u_char * buf, size_t * buflen);
