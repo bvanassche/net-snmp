@@ -4,10 +4,24 @@ set -eu
 
 preload_libasan() {
     cc=$(sed -n "s/^CC='//p" config.status | sed "s/'$//")
-    if nm ./snmplib/.libs/libnetsnmp.so 2>/dev/null | grep -q __asan; then
-	libasan_path=$(${cc} -print-file-name=libasan.so 2>/dev/null)
+    if nm ./snmplib/.libs/libnetsnmp.so ./snmplib/.libs/libnetsnmp.dylib 2>/dev/null | grep -q __asan; then
+	libasan_path=""
+	for name in libasan.dylib libclang_rt.asan_osx_dynamic.dylib libasan.so; do
+	    lib=$(${cc} -print-file-name=$name 2>/dev/null)
+	    if [ -f "$lib" ]; then
+		libasan_path=$lib
+		break
+	    fi
+	done
 	if [ -n "$libasan_path" ] && [ -f "$libasan_path" ]; then
-            export ASAN_OPTIONS=detect_leaks=0 LD_PRELOAD="$libasan_path"
+	    case "$(uname)" in
+		Darwin)
+		    export ASAN_OPTIONS=detect_leaks=0 DYLD_INSERT_LIBRARIES="$libasan_path"
+		    ;;
+		*)
+		    export ASAN_OPTIONS=detect_leaks=0 LD_PRELOAD="$libasan_path"
+		    ;;
+	    esac
 	fi
     fi
 }

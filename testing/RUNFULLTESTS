@@ -203,10 +203,18 @@ sub decide_exec {
                 }
                 close(M);
             }
-            my $asan_lib = `$cc -print-file-name=libasan.so 2>/dev/null`;
-            chomp($asan_lib);
-            if (-f $asan_lib) {
-                return [ "env", "LD_PRELOAD=$asan_lib", "LSAN_OPTIONS=exitcode=0", $^X, $testfile ];
+            my $asan_lib;
+            for my $name (qw(libasan.dylib libclang_rt.asan_osx_dynamic.dylib libasan.so)) {
+                my $out = `$cc -print-file-name=$name 2>/dev/null`;
+                chomp($out);
+                if (-f $out) {
+                    $asan_lib = $out;
+                    last;
+                }
+            }
+            if ($asan_lib) {
+                my $var = ($^O eq 'darwin') ? 'DYLD_INSERT_LIBRARIES' : 'LD_PRELOAD';
+                return [ "env", "$var=$asan_lib", "LSAN_OPTIONS=exitcode=0", $^X, $testfile ];
             }
         }
     }

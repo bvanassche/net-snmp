@@ -210,9 +210,23 @@ if [ -f "$builddir/Makefile" ]; then
     MAKEFILE_LDFLAGS=$(grep "^LDFLAGS[[:space:]]*=" "$builddir/Makefile" | sed 's/^LDFLAGS[[:space:]]*=[[:space:]]*//')
     if echo "$MAKEFILE_CFLAGS $MAKEFILE_LDFLAGS" | grep -q -- "-fsanitize=address"; then
         compiler="${MAKEFILE_CC:-gcc}"
-        asan_lib=$($compiler -print-file-name=libasan.so 2>/dev/null)
+        asan_lib=""
+        for name in libasan.dylib libclang_rt.asan_osx_dynamic.dylib libasan.so; do
+            lib=$($compiler -print-file-name=$name 2>/dev/null)
+            if [ -f "$lib" ]; then
+                asan_lib=$lib
+                break
+            fi
+        done
         if [ -f "$asan_lib" ]; then
-            SNMP_PERLPROG="env LD_PRELOAD=$asan_lib LSAN_OPTIONS=detect_leaks=0:exitcode=0 $SNMP_PERLPROG"
+            case "$(uname)" in
+                Darwin)
+                    SNMP_PERLPROG="env DYLD_INSERT_LIBRARIES=$asan_lib LSAN_OPTIONS=detect_leaks=0:exitcode=0 $SNMP_PERLPROG"
+                    ;;
+                *)
+                    SNMP_PERLPROG="env LD_PRELOAD=$asan_lib LSAN_OPTIONS=detect_leaks=0:exitcode=0 $SNMP_PERLPROG"
+                    ;;
+            esac
         fi
     fi
 fi

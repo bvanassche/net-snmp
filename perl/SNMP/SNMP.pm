@@ -16,6 +16,9 @@ BEGIN {
     if ($ENV{'LD_PRELOAD'} && $ENV{'LD_PRELOAD'} =~ /libasan/) {
         delete $ENV{'LD_PRELOAD'};
     }
+    if ($ENV{'DYLD_INSERT_LIBRARIES'} && $ENV{'DYLD_INSERT_LIBRARIES'} =~ /libasan|libclang_rt/) {
+        delete $ENV{'DYLD_INSERT_LIBRARIES'};
+    }
 }
 
 require Exporter;
