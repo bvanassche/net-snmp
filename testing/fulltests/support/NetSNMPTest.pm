@@ -84,9 +84,17 @@ sub start_agent {
 sub stop_agent {
     my ($self) = @_;
     my $pidfile = new IO::File "$self->{'snmpd.pid'}";
-    my $pid = <$pidfile>;
-    kill("TERM", $pid);
-    $self->wait_for($self->{'snmpd.log'}, 'shutting down');
+    if ($pidfile) {
+        my $pid = <$pidfile>;
+        if (defined($pid) && $pid =~ /^\d+$/) {
+            kill("TERM", $pid);
+            $self->wait_for($self->{'snmpd.log'}, 'shutting down');
+            for (my $i = 0; $i < 50; ++$i) {
+                last if !kill(0, $pid);
+                select(undef, undef, undef, 0.1);
+            }
+        }
+    }
 }
 
 # returns 1 on success, 0 on failure
