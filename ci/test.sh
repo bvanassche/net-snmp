@@ -11,6 +11,12 @@ esac
 
 scriptdir="$(dirname "$0")"
 
+case "$MODE" in
+    Android)
+	exit 0
+	;;
+esac
+
 case $(uname) in
     MinGW)
 	;;
