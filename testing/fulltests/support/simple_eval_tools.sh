@@ -563,7 +563,7 @@ STARTAGENT() {
     if ! echo "$AGENT_FLAGS" | grep -q -- "-X"; then
 	case "$SNMP_TRANSPORT_SPEC" in
 	    *udp*|*tcp*|alias)
-		SNMP_SNMPD_PORT=$(LC_ALL=C sed -n 's/^.*Listening on address.*:\([0-9]*\)$/\1/p' "$SNMP_SNMPD_LOG_FILE" | head -n 1)
+		SNMP_SNMPD_PORT=$(LC_ALL=C sed -n 's/^.*Listening on address.*:\([0-9]*\).*/\1/p' "$SNMP_SNMPD_LOG_FILE" | head -n 1)
 		if [ "x$SNMP_SNMPD_PORT" = "x" ]; then
 		    echo "$0: failed because SNMP_SNMPD_PORT is empty"
 		    exit 1
@@ -586,7 +586,7 @@ STARTTRAPD() {
     STARTPROG
     WAITFORCOND test -f $SNMP_SNMPTRAPD_PID_FILE
     WAITFORTRAPD "^NET-SNMP version "
-    SNMP_SNMPTRAPD_PORT=$(LC_ALL=C sed -n 's/^.*Listening on address.*:\([0-9]*\)$/\1/p' "$SNMP_SNMPTRAPD_LOG_FILE" | head -n1)
+    SNMP_SNMPTRAPD_PORT=$(LC_ALL=C sed -n 's/^.*Listening on address.*:\([0-9]*\).*/\1/p' "$SNMP_SNMPTRAPD_LOG_FILE" | head -n 1)
     if [ "x$SNMP_SNMPTRAPD_PORT" = "x" ]; then
 	echo "$0: failed because SNMP_SNMPTRAPD_PORT is empty"
 	exit 1
@@ -594,7 +594,7 @@ STARTTRAPD() {
 }
 
 SNMP_AGENTX_PORT_FROM_LOG_FILE() {
-    awk '/AgentX master listening on/ { sub(/.*:/, ""); print; exit; }' "$1"
+    LC_ALL=C sed -n 's/^.*AgentX master listening on.*:\([0-9]*\).*/\1/p' "$1" | head -n 1
 }
 
 ## sending SIGHUP for reconfiguration

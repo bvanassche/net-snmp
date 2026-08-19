@@ -39,7 +39,7 @@ for i in $(seq 1 30); do
 done
 
 # Extract the allocated port
-allocated_port=$(sed -n 's/.*Listening on address .*:\([0-9][0-9]*\)$/\1/p' \
+allocated_port=$(LC_ALL=C sed -n 's/.*Listening on address .*:\([0-9][0-9]*\).*/\1/p' \
 		     "${snmpd_log}" | head -n 1)
 if [ -z "$allocated_port" ]; then
     echo "Failed to find allocated port in $snmpd_log"
