@@ -181,12 +181,7 @@ if [ "x$SNMP_FLAGS" = "x" ]; then
 fi
 
 if [ "x$OSTYPE" = "xmsys" ]; then
-    # Obtain the MSYS installation path from the !C: environment variable,
-    # remove surrounding single quotes and convert backslashes into forward
-    # slashes.
-    MSYS_PATH="$(set \
-                 | sed -n 's|^\!C:='"'"'\(.*\)'"'"'$|\1|p' | sed 's|\\|/|g')"
-    MSYS_SH="$MSYS_PATH/sh.exe"
+    MSYS_SH="$(cygpath -m "$(type -p sh 2>/dev/null || command -v sh 2>/dev/null || echo /bin/sh)")"
 fi
 
 if [ "x$SNMP_SNMPD_PORT" = "x" ]; then
