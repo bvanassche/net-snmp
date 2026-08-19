@@ -10,8 +10,6 @@ if [ "x$MIBDIRS" = "x" ]; then
     export MIBDIRS
 fi
 
-"`dirname "$0"`/check_for_pskill"
-
 success_count=0
 failed_count=0
 rm -f failed_tests

@@ -364,12 +364,7 @@ CHECKAGENTCOUNT() {
 ISRUNNING() {
     [ -n "$1" ] && [ "$1" -eq "$1" ] 2>/dev/null || return 1
     if [ "x$OSTYPE" = "xmsys" ]; then
-	pslist.exe "$1" 2>&1 | while read name pspid rest; do
-	    if [ "$1" = "$pspid" ]; then
-		return 0
-	    fi
-	done
-	return 1
+	tasklist.exe //FI "PID eq $1" 2>&1 | grep -qw "$1"
     else
         kill -0 "$1" 2>/dev/null
     fi
@@ -378,7 +373,11 @@ ISRUNNING() {
 # Echo a command that asks the process with pid $1 to stop.
 ECHOSENDSIGTERM() {
     if [ "x$OSTYPE" = "xmsys" ]; then
-        echo pskill.exe $1
+	if type taskkill.exe >/dev/null 2>&1; then
+	    echo taskkill.exe //F //PID $1
+	else
+	    echo pskill.exe $1
+	fi
     else
         echo kill -TERM $1
     fi
@@ -387,7 +386,11 @@ ECHOSENDSIGTERM() {
 # Echo a command that stops the process with pid $1 forcibly.
 ECHOSENDSIGKILL() {
     if [ "x$OSTYPE" = "xmsys" ]; then
-        echo pskill.exe $1
+	if type taskkill.exe >/dev/null 2>&1; then
+	    echo taskkill.exe //F //PID $1
+	else
+	    echo pskill.exe $1
+	fi
     else
         echo kill -KILL $1
     fi
