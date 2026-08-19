@@ -85,7 +85,7 @@ fi
 # make sure that we can fulfill all library dependencies
 _ld_lib_path="${SNMP_UPDIR}/snmplib/.libs:${SNMP_UPDIR}/agent/.libs:${SNMP_UPDIR}/agent/helpers/.libs"
 case `uname` in
-  CYGWIN*)
+  CYGWIN*|MINGW*|MSYS*)
     PATH="${_ld_lib_path}:$PATH"
     export PATH
     ;;
