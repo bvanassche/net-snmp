@@ -18,13 +18,9 @@
 # this function that translates paths explicitly.
 translate_path() {
   if [ "$OSTYPE" = msys ]; then
-    local t=`set \
-             | sed -n -e "s/^$1='\(.*\)'$/${SNMP_ENV_SEPARATOR}\1/p" \
-                      -e "s/^$1=\(.*\)$/${SNMP_ENV_SEPARATOR}\1/p" \
-             | sed -e "s|${SNMP_ENV_SEPARATOR}/c/|${SNMP_ENV_SEPARATOR}c:/|g" \
-                   -e "s|${SNMP_ENV_SEPARATOR}/tmp/|${SNMP_ENV_SEPARATOR}c:/windows/temp/|g" \
-             | sed -e "s/^${SNMP_ENV_SEPARATOR}//" \
-            `
+    local val
+    eval "val=\$$1"
+    local t="$(cygpath -m -p "$val")"
     eval "$1='$t'"
   fi
 }
