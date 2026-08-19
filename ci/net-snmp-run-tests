@@ -4,7 +4,10 @@ set -eu
 
 scriptdir=$(dirname "$0")
 
-if killall snmpd snmptrapd >/dev/null 2>&1; then :; fi
+if type taskkill.exe >/dev/null 2>&1; then
+    taskkill.exe //F //IM snmpd.exe >/dev/null 2>&1 || true
+    taskkill.exe //F //IM snmptrapd.exe >/dev/null 2>&1 || true
+elif killall snmpd snmptrapd >/dev/null 2>&1; then :; fi
 
 if rm -rf /tmp/snmp*; then :; fi
 
