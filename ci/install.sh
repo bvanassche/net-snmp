@@ -100,7 +100,6 @@ case "$(uname -a)" in
 	pacman --noconfirm --sync --needed mingw-w64-x86_64-openssl
 	pacman --noconfirm --sync --needed mingw-w64-x86_64-pkgconf ||
 	    pacman --noconfirm --sync --needed mingw-w64-x86_64-pkg-config
-	export PATH="/mingw64/bin:$PATH"
 	;;
 esac
 
