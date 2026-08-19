@@ -6,11 +6,11 @@ image:
 
 environment:
   matrix:
+    - BUILD: MinGW64
     - BUILD: MSVCDYNAMIC64
     - BUILD: MSVCSTATIC64
     - BUILD: INSTALLER
     - BUILD: MSYS2
-    - BUILD: MinGW64
 
 matrix:
   exclude:
