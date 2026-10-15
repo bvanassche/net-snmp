@@ -346,16 +346,26 @@ netsnmp_udp6_send(netsnmp_transport *t, const void *buf, int size,
 {
     int rc = -1;
     const netsnmp_indexed_addr_pair *addr_pair = NULL;
+    netsnmp_scoped_addr_pair *scoped_pair = NULL;
     const struct sockaddr *to = NULL;
 
-    if (opaque && *opaque && olength &&
-        (*olength == sizeof(netsnmp_indexed_addr_pair) ||
-         *olength == sizeof(struct sockaddr_in6))) {
-        addr_pair = *opaque;
-    } else if (t && t->data &&
-               t->data_length == sizeof(netsnmp_indexed_addr_pair)) {
-        addr_pair = t->data;
-    } else {
+    if (opaque && *opaque && olength) {
+        if (*olength == sizeof(netsnmp_scoped_addr_pair)) {
+            scoped_pair = *opaque;
+            addr_pair = &scoped_pair->addr_pair;
+        } else if (*olength == sizeof(netsnmp_indexed_addr_pair) ||
+                   *olength == sizeof(struct sockaddr_in6)) {
+            addr_pair = *opaque;
+        }
+    } else if (t && t->data) {
+        if (t->data_length == sizeof(netsnmp_scoped_addr_pair)) {
+            scoped_pair = t->data;
+            addr_pair = &scoped_pair->addr_pair;
+        } else if (t->data_length == sizeof(netsnmp_indexed_addr_pair)) {
+            addr_pair = t->data;
+        }
+    }
+    if (!addr_pair) {
         int len = -1;
 
         if (opaque && *opaque && olength)
@@ -368,10 +378,31 @@ netsnmp_udp6_send(netsnmp_transport *t, const void *buf, int size,
 
     to = &addr_pair->remote_addr.sa;
 
+#if defined(HAVE_STRUCT_SOCKADDR_IN6_SIN6_SCOPE_ID)
+    if (scoped_pair && scoped_pair->remote_scope[0] &&
+        to->sa_family == AF_INET6) {
+        unsigned scope_id =
+            netsnmp_if_nametoindex(scoped_pair->remote_scope);
+
+        scoped_pair->addr_pair.remote_addr.sin6.sin6_scope_id = scope_id;
+        if (t && t->data == scoped_pair && t->remote &&
+            t->remote_length == sizeof(struct sockaddr_in6)) {
+            ((struct sockaddr_in6 *)t->remote)->sin6_scope_id = scope_id;
+        }
+        if (scope_id == 0) {
+            DEBUGMSGTL(("netsnmp_udp6", "unknown scope %s\n",
+                        scoped_pair->remote_scope));
+            errno = EINVAL;
+            return -1;
+        }
+    }
+#endif
+
     if (to && t && NETSNMP_IS_VALID_SOCKET(t->sock)) {
         DEBUGIF("netsnmp_udp6") {
             char *str = netsnmp_udp6_fmtaddr(
-                NULL, addr_pair, sizeof(netsnmp_indexed_addr_pair));
+                NULL, scoped_pair ? (const void *)scoped_pair : addr_pair,
+                scoped_pair ? sizeof(*scoped_pair) : sizeof(*addr_pair));
             DEBUGMSGTL(("netsnmp_udp6",
                         "send %d bytes from %p to %s on fd %" NETSNMP_FMT_SKT "\n",
                         size, buf, str, t->sock));
@@ -450,21 +481,23 @@ netsnmp_udp6_transport_init(const struct netsnmp_ep *ep, int flags)
     }
 
     if (!local) {
-        netsnmp_indexed_addr_pair *addr_pair;
+        netsnmp_scoped_addr_pair *scoped_pair;
 
         /*
          * allocate space to save the (remote) address in the
-         * transport-specific data pointer for later use by netsnmp_udp_send.
+         * transport-specific data pointer for later use by netsnmp_udp6_send.
          */
-        t->data = calloc(1, sizeof(netsnmp_indexed_addr_pair));
-        if (NULL == t->data) {
+        scoped_pair = calloc(1, sizeof(*scoped_pair));
+        if (NULL == scoped_pair) {
             netsnmp_transport_free(t);
             return NULL;
         }
-        t->data_length = sizeof(netsnmp_indexed_addr_pair);
+        t->data = scoped_pair;
+        t->data_length = sizeof(*scoped_pair);
 
-        addr_pair = (netsnmp_indexed_addr_pair *)t->data;
-        memcpy(&addr_pair->remote_addr, addr, sizeof(*addr));
+        memcpy(&scoped_pair->addr_pair.remote_addr, addr, sizeof(*addr));
+        strlcpy(scoped_pair->remote_scope, ep->scope,
+                sizeof(scoped_pair->remote_scope));
     }
 
     /*
